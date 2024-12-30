@@ -52,11 +52,13 @@ jobs:
         with:
           command: test
           args: --release --features=${{ matrix.features }} --target ${{ matrix.target }} -vv --no-run
+      - name: Package Crate
+        run: cargo package
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: release-binary
-          path: target/aarch64-apple-darwin/release/
+          name: crate
+          path: target/package/*.crate
     strategy:
       matrix:
         channel: [stable]

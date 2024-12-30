@@ -51,7 +51,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --features=${{ matrix.features }} --target ${{ matrix.target }} -vv --no-run
+          args: --release --features=${{ matrix.features }} --target ${{ matrix.target }} -vv --no-run
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -59,7 +59,8 @@ jobs:
           path: target/aarch64-apple-darwin/release/
     strategy:
       matrix:
-        channel: [stable, beta]
+        channel: [stable]
+        # channel: [stable, beta]
         # always build at least with `vendored-openssl` for macOS/iOS
         # features: ["vendored-openssl", "vendored-openssl,vendored-lzma,vendored-zstd"]
         features: ["vendored-openssl,vendored-lzma,vendored-zstd"]

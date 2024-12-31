@@ -130,7 +130,14 @@
  *  actual needed HS purpose. */
 #define CIRCUIT_PURPOSE_HS_VANGUARDS 24
 
-#define CIRCUIT_PURPOSE_MAX_ 24
+/**
+ * These two purposes are for conflux. The first is for circuits that are
+ * being built, but not yet linked. The second is for circuits that are
+ * linked and ready to use for streams. */
+#define CIRCUIT_PURPOSE_CONFLUX_UNLINKED 25
+#define CIRCUIT_PURPOSE_CONFLUX_LINKED 26
+
+#define CIRCUIT_PURPOSE_MAX_ 26
 /** A catch-all for unrecognized purposes. Currently we don't expect
  * to make or see any circuits with this purpose. */
 #define CIRCUIT_PURPOSE_UNKNOWN 255
@@ -165,6 +172,7 @@
 extern double cc_stats_circ_close_cwnd_ma;
 extern double cc_stats_circ_close_ss_cwnd_ma;
 extern uint64_t cc_stats_circs_closed;
+extern uint64_t circ_n_proto_violation;
 
 /** Convert a circuit_t* to a pointer to the enclosing or_circuit_t.  Assert
  * if the cast is impossible. */
@@ -246,6 +254,8 @@ MOCK_DECL(void, channel_note_destroy_not_pending,
           (channel_t *chan, circid_t id));
 
 smartlist_t *circuit_find_circuits_to_upgrade_from_guard_wait(void);
+
+bool circuit_is_queue_full(const circuit_t *circ, cell_direction_t direction);
 
 /* Declare the handle helpers */
 HANDLE_DECL(circuit, circuit_t, )

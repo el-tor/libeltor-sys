@@ -14,6 +14,8 @@
 #include "core/or/extend_info_st.h"
 #include "core/or/crypt_path_st.h"
 #define TOR_CONGESTION_CONTROL_PRIVATE
+#define TOR_CONGESTION_CONTROL_COMMON_PRIVATE
+#include "core/or/congestion_control_st.h"
 #include "core/or/congestion_control_common.h"
 #include "app/config/config.h"
 
@@ -211,7 +213,8 @@ run_full_handshake(circuit_params_t *serv_params_in,
 
   onionskin_len = onion_skin_create(ONION_HANDSHAKE_TYPE_NTOR_V3, &info,
                     &handshake_state, onionskin,
-                    sizeof(onionskin));
+                    sizeof(onionskin),
+                    NULL); // TODO Pass payhash
   tt_int_op(onionskin_len, OP_NE, -1);
 
   server_keys.junk_keypair = &handshake_state.u.ntor3->client_keypair;
@@ -262,6 +265,7 @@ test_ntor3_handshake(void *arg)
   tt_int_op(serv_params.cc_enabled, OP_EQ, 0);
 
   /* client off, serv on -> off */
+  congestion_control_set_cc_disabled();
   serv_ns_params.cc_enabled = 1;
   run_full_handshake(&serv_ns_params, &client_params, &serv_params);
   tt_int_op(client_params.cc_enabled, OP_EQ, 0);

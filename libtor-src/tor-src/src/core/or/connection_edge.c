@@ -70,8 +70,10 @@
 #include "core/or/circuitpadding.h"
 #include "core/or/connection_edge.h"
 #include "core/or/congestion_control_flow.h"
+#include "core/or/conflux_util.h"
 #include "core/or/circuitstats.h"
 #include "core/or/connection_or.h"
+#include "core/or/dos.h"
 #include "core/or/extendinfo.h"
 #include "core/or/policies.h"
 #include "core/or/reasons.h"
@@ -104,6 +106,7 @@
 #include "lib/buf/buffers.h"
 #include "lib/crypt_ops/crypto_rand.h"
 #include "lib/crypt_ops/crypto_util.h"
+#include "lib/encoding/confline.h"
 
 #include "core/or/cell_st.h"
 #include "core/or/cpath_build_state_st.h"
@@ -628,6 +631,7 @@ connection_half_edge_add(const edge_connection_t *conn,
 
   if (!circ->half_streams) {
     circ->half_streams = smartlist_new();
+    conflux_update_half_streams(circ, circ->half_streams);
   }
 
   half_conn->stream_id = conn->stream_id;
@@ -671,6 +675,25 @@ connection_half_edge_add(const edge_connection_t *conn,
                                     connection_half_edge_compare_bsearch,
                                     &ignored);
   smartlist_insert(circ->half_streams, insert_at, half_conn);
+}
+
+/**
+ * Return true if the circuit has any half-closed connections
+ * that are still within the end_ack_expected_usec timestamp
+ * from now.
+ */
+bool
+connection_half_edges_waiting(const origin_circuit_t *circ)
+{
+  if (!circ->half_streams)
+    return false;
+
+  SMARTLIST_FOREACH_BEGIN(circ->half_streams, const half_edge_t *, half_conn) {
+    if (half_conn->end_ack_expected_usec > monotime_absolute_usec())
+      return true;
+  } SMARTLIST_FOREACH_END(half_conn);
+
+  return false;
 }
 
 /** Release space held by <b>he</b> */
@@ -1192,7 +1215,10 @@ connection_ap_expire_beginning(void)
      * it here too because controllers that put streams in controller_wait
      * state never ask Tor to attach the circuit. */
     if (AP_CONN_STATE_IS_UNATTACHED(base_conn->state)) {
-      if (seconds_since_born >= options->SocksTimeout) {
+      /* If this is a connection to an HS with PoW defenses enabled, we need to
+       * wait longer than the usual Socks timeout. */
+      if (seconds_since_born >= options->SocksTimeout &&
+          !entry_conn->hs_with_pow_conn) {
         log_fn(severity, LD_APP,
             "Tried for %d seconds to get a connection to %s:%d. "
             "Giving up. (%s)",
@@ -1236,6 +1262,7 @@ connection_ap_expire_beginning(void)
     }
 
     if (circ->purpose != CIRCUIT_PURPOSE_C_GENERAL &&
+        circ->purpose != CIRCUIT_PURPOSE_CONFLUX_LINKED &&
         circ->purpose != CIRCUIT_PURPOSE_CONTROLLER &&
         circ->purpose != CIRCUIT_PURPOSE_C_HSDIR_GET &&
         circ->purpose != CIRCUIT_PURPOSE_S_HSDIR_POST &&
@@ -2029,6 +2056,19 @@ connection_ap_handle_onion(entry_connection_t *conn,
     descriptor_is_usable =
       hs_client_any_intro_points_usable(&hs_conn_ident->identity_pk,
                                         cached_desc);
+    /* Check if PoW parameters have expired. If yes, the descriptor is
+     * unusable. */
+    if (cached_desc->encrypted_data.pow_params) {
+      if (cached_desc->encrypted_data.pow_params->expiration_time <
+          approx_time()) {
+        log_info(LD_REND, "Descriptor PoW parameters have expired.");
+        descriptor_is_usable = 0;
+      } else {
+        /* Mark that the connection is to an HS with PoW defenses on. */
+        conn->hs_with_pow_conn = 1;
+      }
+    }
+
     log_info(LD_GENERAL, "Found %s descriptor in cache for %s. %s.",
              (descriptor_is_usable) ? "usable" : "unusable",
              safe_str_client(socks->address),
@@ -3101,6 +3141,10 @@ get_unique_stream_id_by_circ(origin_circuit_t *circ)
                                            test_stream_id))
     goto again;
 
+  if (TO_CIRCUIT(circ)->conflux) {
+    conflux_sync_circ_fields(TO_CIRCUIT(circ)->conflux, circ);
+  }
+
   return test_stream_id;
 }
 
@@ -3112,6 +3156,8 @@ connection_ap_supports_optimistic_data(const entry_connection_t *conn)
   const edge_connection_t *edge_conn = ENTRY_TO_EDGE_CONN(conn);
   /* We can only send optimistic data if we're connected to an open
      general circuit. */
+  // TODO-329-PURPOSE: Can conflux circuits use optimistic data?
+  // Does anything use optimistic data?
   if (edge_conn->on_circuit == NULL ||
       edge_conn->on_circuit->state != CIRCUIT_STATE_OPEN ||
       (edge_conn->on_circuit->purpose != CIRCUIT_PURPOSE_C_GENERAL &&
@@ -3138,7 +3184,8 @@ connection_ap_get_begincell_flags(entry_connection_t *ap_conn)
     return 0;
 
   /* No flags for hidden services. */
-  if (edge_conn->on_circuit->purpose != CIRCUIT_PURPOSE_C_GENERAL)
+  if (edge_conn->on_circuit->purpose != CIRCUIT_PURPOSE_C_GENERAL &&
+      edge_conn->on_circuit->purpose != CIRCUIT_PURPOSE_CONFLUX_LINKED)
     return 0;
 
   /* If only IPv4 is supported, no flags */
@@ -3222,6 +3269,7 @@ connection_ap_handshake_send_begin,(entry_connection_t *ap_conn))
 
   tor_snprintf(payload,RELAY_PAYLOAD_SIZE, "%s:%d",
                (circ->base_.purpose == CIRCUIT_PURPOSE_C_GENERAL ||
+                circ->base_.purpose == CIRCUIT_PURPOSE_CONFLUX_LINKED ||
                 circ->base_.purpose == CIRCUIT_PURPOSE_CONTROLLER) ?
                  ap_conn->socks_request->address : "",
                ap_conn->socks_request->port);
@@ -3323,7 +3371,8 @@ connection_ap_handshake_send_resolve(entry_connection_t *ap_conn)
   tor_assert(base_conn->type == CONN_TYPE_AP);
   tor_assert(base_conn->state == AP_CONN_STATE_CIRCUIT_WAIT);
   tor_assert(ap_conn->socks_request);
-  tor_assert(circ->base_.purpose == CIRCUIT_PURPOSE_C_GENERAL);
+  tor_assert(circ->base_.purpose == CIRCUIT_PURPOSE_C_GENERAL ||
+             circ->base_.purpose == CIRCUIT_PURPOSE_CONFLUX_LINKED);
 
   command = ap_conn->socks_request->command;
   tor_assert(SOCKS_COMMAND_IS_RESOLVE(command));
@@ -3942,6 +3991,7 @@ connection_exit_begin_conn(cell_t *cell, circuit_t *circ)
   begin_cell_t bcell;
   int rv;
   uint8_t end_reason=0;
+  dos_stream_defense_type_t dos_defense_type;
 
   assert_circuit_ok(circ);
   if (!CIRCUIT_IS_ORIGIN(circ)) {
@@ -4100,6 +4150,24 @@ connection_exit_begin_conn(cell_t *cell, circuit_t *circ)
 
   log_debug(LD_EXIT,"about to start the dns_resolve().");
 
+  // in the future we may want to have a similar defense for BEGIN_DIR and
+  // BEGIN sent to OS.
+  dos_defense_type = dos_stream_new_begin_or_resolve_cell(or_circ);
+  switch (dos_defense_type) {
+    case DOS_STREAM_DEFENSE_NONE:
+      break;
+    case DOS_STREAM_DEFENSE_REFUSE_STREAM:
+      // we don't use END_STREAM_REASON_RESOURCELIMIT because it would make a
+      // client mark us as non-functional until they get a new consensus.
+      relay_send_end_cell_from_edge(rh.stream_id, circ, END_STREAM_REASON_MISC,
+                                    layer_hint);
+      connection_free_(TO_CONN(n_stream));
+      return 0;
+    case DOS_STREAM_DEFENSE_CLOSE_CIRCUIT:
+      connection_free_(TO_CONN(n_stream));
+      return -END_CIRC_REASON_RESOURCELIMIT;
+  }
+
   /* send it off to the gethostbyname farm */
   switch (dns_resolve(n_stream)) {
     case 1: /* resolve worked; now n_stream is attached to circ. */
@@ -4123,17 +4191,21 @@ connection_exit_begin_conn(cell_t *cell, circuit_t *circ)
  * Called when we receive a RELAY_COMMAND_RESOLVE cell 'cell' along the
  * circuit <b>circ</b>;
  * begin resolving the hostname, and (eventually) reply with a RESOLVED cell.
+ *
+ * Return -(some circuit end reason) if we want to tear down <b>circ</b>.
+ * Else return 0.
  */
 int
 connection_exit_begin_resolve(cell_t *cell, or_circuit_t *circ)
 {
   edge_connection_t *dummy_conn;
   relay_header_t rh;
+  dos_stream_defense_type_t dos_defense_type;
 
   assert_circuit_ok(TO_CIRCUIT(circ));
   relay_header_unpack(&rh, cell->payload);
   if (rh.length > RELAY_PAYLOAD_SIZE)
-    return -1;
+    return 0;
 
   /* Note the RESOLVE stream as seen. */
   rep_hist_note_exit_stream(RELAY_COMMAND_RESOLVE);
@@ -4155,6 +4227,19 @@ connection_exit_begin_resolve(cell_t *cell, or_circuit_t *circ)
   dummy_conn->base_.purpose = EXIT_PURPOSE_RESOLVE;
 
   dummy_conn->on_circuit = TO_CIRCUIT(circ);
+
+  dos_defense_type = dos_stream_new_begin_or_resolve_cell(circ);
+  switch (dos_defense_type) {
+    case DOS_STREAM_DEFENSE_NONE:
+      break;
+    case DOS_STREAM_DEFENSE_REFUSE_STREAM:
+      dns_send_resolved_error_cell(dummy_conn, RESOLVED_TYPE_ERROR_TRANSIENT);
+      connection_free_(TO_CONN(dummy_conn));
+      return 0;
+    case DOS_STREAM_DEFENSE_CLOSE_CIRCUIT:
+      connection_free_(TO_CONN(dummy_conn));
+      return -END_CIRC_REASON_RESOURCELIMIT;
+  }
 
   /* send it off to the gethostbyname farm */
   switch (dns_resolve(dummy_conn)) {
@@ -4188,6 +4273,76 @@ my_exit_policy_rejects(const tor_addr_t *addr,
     return 1;
   }
   return 0;
+}
+
+/* Reapply exit policy to existing connections, possibly terminating
+ * connections
+ * no longer allowed by the policy.
+ */
+void
+connection_reapply_exit_policy(config_line_t *changes)
+{
+  int marked_for_close = 0;
+  smartlist_t *conn_list = NULL;
+  smartlist_t *policy = NULL;
+  int config_change_relevant = 0;
+
+  if (get_options()->ReevaluateExitPolicy == 0) {
+    return;
+  }
+
+  for (const config_line_t *line = changes;
+       line && !config_change_relevant;
+       line = line->next) {
+    const char* exit_policy_options[] = {
+      "ExitRelay",
+      "ExitPolicy",
+      "ReducedExitPolicy",
+      "ReevaluateExitPolicy",
+      "IPv6Exit",
+      NULL
+    };
+    for (unsigned int i = 0; exit_policy_options[i] != NULL; ++i) {
+      if (strcmp(line->key, exit_policy_options[i]) == 0) {
+        config_change_relevant = 1;
+        break;
+      }
+    }
+  }
+
+  if (!config_change_relevant) {
+    /* Policy did not change: no need to iterate over connections */
+    return;
+  }
+
+  // we can't use router_compare_to_my_exit_policy as it depend on the
+  // descriptor, which is regenerated asynchronously, so we have to parse the
+  // policy ourselves.
+  // We don't verify for our own IP, it's not part of the configuration.
+  if (BUG(policies_parse_exit_policy_from_options(get_options(), NULL, NULL,
+                                                  &policy) != 0)) {
+    return;
+  }
+
+  conn_list = connection_list_by_type_purpose(CONN_TYPE_EXIT,
+                                              EXIT_PURPOSE_CONNECT);
+
+  SMARTLIST_FOREACH_BEGIN(conn_list, connection_t *, conn) {
+    addr_policy_result_t verdict = compare_tor_addr_to_addr_policy(&conn->addr,
+                                                                   conn->port,
+                                                                   policy);
+    if (verdict != ADDR_POLICY_ACCEPTED) {
+      connection_edge_end(TO_EDGE_CONN(conn), END_STREAM_REASON_EXITPOLICY);
+      connection_mark_for_close(conn);
+      ++marked_for_close;
+    }
+  } SMARTLIST_FOREACH_END(conn);
+
+  smartlist_free(conn_list);
+  smartlist_free(policy);
+
+  log_info(LD_GENERAL, "Marked %d connections to be closed as no longer "
+           "allowed per ExitPolicy", marked_for_close);
 }
 
 /** Return true iff the consensus allows network reentry. The default value is

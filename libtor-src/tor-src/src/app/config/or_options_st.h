@@ -141,6 +141,8 @@ struct or_options_t {
                                         * Includes OutboundBindAddresses and
                                         * configured ports. */
   int ReducedExitPolicy; /**<Should we use the Reduced Exit Policy? */
+  int ReevaluateExitPolicy; /**<Should we re-evaluate Exit Policy on existing
+                             * connections when it changes? */
   struct config_line_t *SocksPolicy; /**< Lists of socks policy components */
   struct config_line_t *DirPolicy; /**< Lists of dir policy components */
   /** Local address to bind outbound sockets */
@@ -396,8 +398,6 @@ struct or_options_t {
   /** List of suffixes for <b>AutomapHostsOnResolve</b>.  The special value
    * "." means "match everything." */
   struct smartlist_t *AutomapHostsSuffixes;
-  int RendPostPeriod; /**< How often do we post each rendezvous service
-                       * descriptor? Remember to publish them independently. */
   int KeepalivePeriod; /**< How often do we send padding cells to keep
                         * connections alive? */
   int SocksTimeout; /**< How long do we let a socks connection wait
@@ -724,6 +724,19 @@ struct or_options_t {
    * clients prefer IPv4. Use reachable_addr_prefer_ipv6_dirport() instead of
    * accessing this value directly.  */
   int ClientPreferIPv6DirPort;
+
+  /** If true, always use the compiled hash implementation. If false, always
+   * the interpreter. Default of "auto" allows a dynamic fallback from
+   * copmiler to interpreter. */
+  int CompiledProofOfWorkHash;
+
+  /** If true, the tor client will use conflux for its general purpose
+   * circuits which excludes onion service traffic. */
+  int ConfluxEnabled;
+
+  /** Has the UX integer value that the client will request from the exit. */
+  char *ConfluxClientUX_option;
+  int ConfluxClientUX;
 
   /** The length of time that we think a consensus should be fresh. */
   int V3AuthVotingInterval;
@@ -1091,6 +1104,34 @@ struct or_options_t {
    * in question to get its relevant configuration object.
    */
   struct config_suite_t *subconfigs_;
+
+  /**
+   * To be set by the El Tor relay (server)
+   */ 
+  int AllowAnyRelay;
+  char *ElTorBolt12Offer;
+  int *ElTorSatsRate;
+
+  /**
+   * To be set by the El Tor app (client)
+   */ 
+  char *ElTorPreimageHop1;
+  char *ElTorPreimageHop2;
+  char *ElTorPreimageHop3;
+  char *ElTorPreimageHop4;
+  char *ElTorPreimageHop5;
+  char *ElTorPreimageHop6;
+  char *ElTorPreimageHop7;
+  char *ElTorPreimageHop8;
+  char *ElTorPayHashHop1;
+  char *ElTorPayHashHop2;
+  char *ElTorPayHashHop3;
+  char *ElTorPayHashHop4;
+  char *ElTorPayHashHop5;
+  char *ElTorPayHashHop6;
+  char *ElTorPayHashHop7;
+  char *ElTorPayHashHop8;
+
 };
 
 #endif /* !defined(TOR_OR_OPTIONS_ST_H) */

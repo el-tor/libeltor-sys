@@ -1066,7 +1066,7 @@ socks_policy_permits_address(const tor_addr_t *addr)
 }
 
 /** Return 1 if <b>addr</b> is permitted to connect to our metrics port,
- * based on <b>socks_policy</b>. Else return 0.
+ * based on <b>metrics_policy</b>. Else return 0.
  */
 int
 metrics_policy_permits_address(const tor_addr_t *addr)
@@ -1138,7 +1138,7 @@ authdir_policy_middleonly_address(const tor_addr_t *addr, uint16_t port)
 
 /** Check <b>or_options</b> to determine whether or not we are using the
  * default options for exit policy. Return true if so, false otherwise. */
-static int
+int
 policy_using_default_exit_options(const or_options_t *or_options)
 {
   return (or_options->ExitPolicy == NULL && or_options->ExitRelay == -1 &&

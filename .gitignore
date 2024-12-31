@@ -7,3 +7,5 @@ Cargo.lock
 /tor-src/src/rust/tor_rust/Cargo.toml
 
 *.swp
+
+.DS_Store

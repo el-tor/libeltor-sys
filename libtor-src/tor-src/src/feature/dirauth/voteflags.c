@@ -67,6 +67,9 @@ static uint32_t guard_bandwidth_excluding_exits_kb = 0;
 static inline long
 real_uptime(const routerinfo_t *router, time_t now)
 {
+  if(get_options()->AllowAnyRelay) {
+    return 30*24*60*60;
+  }
   if (now < router->cache_info.published_on)
     return router->uptime;
   else
@@ -83,6 +86,9 @@ dirserv_thinks_router_is_unreliable(time_t now,
                                     const routerinfo_t *router,
                                     int need_uptime, int need_capacity)
 {
+  if(get_options()->AllowAnyRelay) {
+    return 0; 
+  }
   if (need_uptime) {
     if (!enough_mtbf_info) {
       /* XXXX We should change the rule from
@@ -112,8 +118,7 @@ dirserv_thinks_router_is_unreliable(time_t now,
 }
 
 /** Return 1 if <b>ri</b>'s descriptor is "active" -- running, valid,
- * not hibernating, having observed bw greater 0, and not too old. Else
- * return 0.
+ * not hibernating, and not too old. Else return 0.
  */
 static int
 router_is_active(const routerinfo_t *ri, const node_t *node, time_t now)
@@ -124,20 +129,6 @@ router_is_active(const routerinfo_t *ri, const node_t *node, time_t now)
   }
   if (!node->is_running || !node->is_valid || ri->is_hibernating) {
     return 0;
-  }
-  /* Only require bandwidth capacity in non-test networks, or
-   * if TestingTorNetwork, and TestingMinExitFlagThreshold is non-zero */
-  if (!ri->bandwidthcapacity) {
-    if (get_options()->TestingTorNetwork) {
-      if (dirauth_get_options()->TestingMinExitFlagThreshold > 0) {
-        /* If we're in a TestingTorNetwork, and TestingMinExitFlagThreshold is,
-         * then require bandwidthcapacity */
-        return 0;
-      }
-    } else {
-      /* If we're not in a TestingTorNetwork, then require bandwidthcapacity */
-      return 0;
-    }
   }
   return 1;
 }
@@ -467,7 +458,7 @@ running_long_enough_to_decide_unreachable(void)
 {
   const dirauth_options_t *opts = dirauth_get_options();
   return time_of_process_start +
-    opts->TestingAuthDirTimeToLearnReachability < approx_time();
+     opts->TestingAuthDirTimeToLearnReachability < approx_time();
 }
 
 /** Each server needs to have passed a reachability test no more
@@ -541,7 +532,11 @@ dirserv_set_router_is_running(routerinfo_t *router, time_t now)
     rep_hist_note_router_unreachable(router->cache_info.identity_digest, when);
   }
 
-  node->is_running = answer;
+  if(get_options()->AllowAnyRelay) {
+    node->is_running = 1; 
+  } else {
+    node->is_running = answer;
+  }
 }
 
 /* Check <b>node</b> and <b>ri</b> on whether or not we should publish a
@@ -592,8 +587,14 @@ dirauth_set_routerstatus_from_routerinfo(routerstatus_t *rs,
 
   /* Set these flags so that set_routerstatus_from_routerinfo can copy them.
    */
-  node->is_stable = !dirserv_thinks_router_is_unreliable(now, ri, 1, 0);
-  node->is_fast = !dirserv_thinks_router_is_unreliable(now, ri, 0, 1);
+  if(get_options()->AllowAnyRelay) {
+    log_info(LD_DIRSERV, "Eltor AllowAnyRelay true");
+    node->is_stable = 1;
+    node->is_fast = 1; 
+  } else {
+    node->is_stable = !dirserv_thinks_router_is_unreliable(now, ri, 1, 0);
+    node->is_fast = !dirserv_thinks_router_is_unreliable(now, ri, 0, 1);
+  }
   node->is_hs_dir = dirserv_thinks_router_is_hs_dir(ri, node, now);
 
   set_routerstatus_from_routerinfo(rs, node, ri);

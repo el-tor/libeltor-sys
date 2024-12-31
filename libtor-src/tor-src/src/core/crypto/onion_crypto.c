@@ -64,6 +64,9 @@ static const size_t NTOR3_CIRC_VERIFICATION_LEN = 14;
 server_onion_keys_t *
 server_onion_keys_new(void)
 {
+  if (!get_master_identity_key())
+    return NULL;
+
   server_onion_keys_t *keys = tor_malloc_zero(sizeof(server_onion_keys_t));
   memcpy(keys->my_identity, router_get_my_id_digest(), DIGEST_LEN);
   ed25519_pubkey_copy(&keys->my_ed_identity, get_master_identity_key());
@@ -130,7 +133,8 @@ onion_skin_create(int type,
                   const extend_info_t *node,
                   onion_handshake_state_t *state_out,
                   uint8_t *onion_skin_out,
-                  size_t onion_skin_out_maxlen)
+                  size_t onion_skin_out_maxlen,
+                  const char *eltor_payhash)
 {
   int r = -1;
 

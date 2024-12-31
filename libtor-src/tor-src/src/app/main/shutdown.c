@@ -23,6 +23,7 @@
 #include "core/or/circuitlist.h"
 #include "core/or/circuitmux_ewma.h"
 #include "core/or/circuitpadding.h"
+#include "core/or/conflux_pool.h"
 #include "core/or/connection_edge.h"
 #include "core/or/dos.h"
 #include "core/or/scheduler.h"
@@ -119,7 +120,9 @@ tor_free_all(int postfork)
   dirserv_free_all();
   rep_hist_free_all();
   bwhist_free_all();
+  conflux_notify_shutdown();
   circuit_free_all();
+  conflux_pool_free_all();
   circpad_machines_free();
   entry_guards_free_all();
   pt_free_all();

@@ -47,19 +47,19 @@ jobs:
           override: true
           toolchain: ${{ matrix.channel }}
           target: ${{ matrix.target }}
-      - run: brew install automake autoconf libtool openssl
-      - run: export OPENSSL_DIR=$(brew --prefix openssl)
+      - run: brew install automake autoconf libtool
       - uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --release --features=${{ matrix.features }} --target ${{ matrix.target }} -vv --no-run
-      - name: Package Crate
-        run: cargo package
-      - name: Upload Artifact
+          args: --features=${{ matrix.features }} --target ${{ matrix.target }} -vv --no-run
+      - uses: actions-rs/cargo@v1
+        with:
+          command: package
+      - name: Upload Crate Artifact
         uses: actions/upload-artifact@v4
         with:
           name: crate
-          path: target/package/*.crate
+          path: target/package
     strategy:
       matrix:
         channel: [stable]

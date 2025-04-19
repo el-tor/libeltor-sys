@@ -151,9 +151,9 @@ fn build_tor(libevent: Artifacts) {
         .disable("tool-name-check", None)
         .disable("manpage", None)
         .disable("html-manual", None)
-        .disable("module-dirauth", None)
-        .disable("module-relay", None)
-        .disable("module-dircache", None)
+        .enable("module-dirauth", None)
+        .enable("module-relay", None)
+        .enable("module-dircache", None)
         .disable("seccomp", None)
         .disable("libscrypt", None)
         .disable("rust", None);

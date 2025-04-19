@@ -1,3 +1,28 @@
+El Tor
+======
+
+High bandwidth Tor network fork. Incentivized by the Bitcoin Lightning Network. Relays earn sats via BOLT 12 and blinded paths.
+
+#### Projects
+- eltor - Fork of the Tor network. Adds paid circuit handling and EXTENDPAIDCIRCUIT RPC https://github.com/el-tor/eltor
+- eltord - Main daemon that runs El Tor, connects to wallets, listens for payment events and calls rpc's https://github.com/el-tor/eltord
+- eltor-app - VPN-like client to connect to El Tor and remote wallets. UI for running relays and creating hidden services. https://github.com/el-tor/eltor-app
+
+#### Libraries
+- libeltor - Fork of libtor. Rust crate for bundling inside your project a fully-running eltord daemon with fallback to the normal Tor network https://github.com/el-tor/libeltor 
+- LNI - Lightning node interface library. Standard interface to remote connect to CLN, LND, Phoenixd and other implementations. Rust language bindings for android, ios, and javascript (nodejs, react-native). https://github.com/lightning-node-interface/lni 
+    
+#### Testnets
+- chutney - Tor testnet fork https://github.com/el-tor/chutney
+
+#### Spec:
+- [(00) El Tor Spec](https://github.com/el-tor/eltord/blob/master/spec/00_spec.md)
+- [(01) El Tor](https://github.com/el-tor/eltord/blob/master/spec/01_paid_circuits.md)
+
+
+Tor
+===
+
 Tor protects your privacy on the internet by hiding the connection between
 your Internet address and the services you use. We believe Tor is reasonably
 secure, but please ensure you read the instructions and configure it properly.

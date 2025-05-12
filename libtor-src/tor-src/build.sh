@@ -22,3 +22,8 @@ make V=1
 
 # copy tor binary to tor browser (on mac)
 cp $HOME/code/tor/src/app/tor "/Applications/Tor Browser.app/Contents/MacOS/Tor/tor"
+
+
+# Memory Leak test using valgrind alternative
+# MallocStackLogging=1
+# leaks <pid>

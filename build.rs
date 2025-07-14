@@ -31,6 +31,34 @@ impl Artifacts {
     }
 }
 
+fn apply_libevent_patches(path: &PathBuf) {
+    // Disable samples and tests to reduce build time and avoid cross-compilation issues
+    let makefile_path = path.join("Makefile.am");
+    if makefile_path.exists() {
+        let content = fs::read_to_string(&makefile_path).unwrap_or_default();
+        let fixed_content = content
+            .replace("include sample/include.am\n", "")
+            .replace("include test/include.am\n", "");
+        if fixed_content != content {
+            fs::write(&makefile_path, fixed_content).ok();
+            println!("cargo:warning=Applied libevent-disable-samples-tests patch");
+        }
+    }
+}
+
+fn apply_simple_patches(path: &PathBuf) {
+    // Disable tools to avoid OpenSSL 3.x compatibility issues
+    let include_path = path.join("src/include.am");
+    if include_path.exists() {
+        let content = fs::read_to_string(&include_path).unwrap_or_default();
+        let fixed_content = content.replace("include src/tools/include.am\n", "");
+        if fixed_content != content {
+            fs::write(&include_path, fixed_content).ok();
+            println!("cargo:warning=Applied tor-disable-tools patch");
+        }
+    }
+}
+
 // pub fn autoreconf(path: &PathBuf) -> Result<(), Vec<u8>> {
 //     match Command::new("autoreconf")
 //         .current_dir(path)
@@ -61,6 +89,11 @@ fn build_libevent() -> Artifacts {
     fs::create_dir_all(&root).expect("Cannot write to `OUT_DIR`");
 
     let path = libtor_src::get_libevent_dir();
+
+    // Apply simple patches for libevent
+    apply_libevent_patches(&path);
+
+    // Patches are now handled by libtor-src automatically
 
     // if let Err(e) = autoreconf(&path) {
     //     println!(
@@ -125,6 +158,9 @@ fn build_tor(libevent: Artifacts) {
     let zstd_dir = env::var("DEP_ZSTD_ROOT").ok().map(PathBuf::from);
 
     let path = libtor_src::get_tor_dir();
+
+    // Apply simple patches for Android cross-compilation
+    apply_simple_patches(&path);
 
     // if let Err(e) = autoreconf(&path) {
     //     println!(

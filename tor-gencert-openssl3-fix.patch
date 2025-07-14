@@ -1,0 +1,66 @@
+--- a/src/tools/tor-gencert.c
++++ b/src/tools/tor-gencert.c
+@@ -287,10 +287,16 @@
+       return 1;
+ 
+     /* Write the key to the file.  If passphrase is not set, takes it from
+      * the terminal. */
+-    if (!PEM_write_PKCS8PrivateKey_nid(f, identity_key,
+-                                       NID_pbe_WithSHA1And3_Key_TripleDES_CBC,
+-                                       passphrase, (int) passphrase_len,
+-                                       NULL, NULL)) {
++    BIO *bio = BIO_new_fp(f, BIO_NOCLOSE);
++    if (!bio || !PEM_write_bio_PKCS8PrivateKey_nid(bio, identity_key,
++                                       NID_pbe_WithSHA1And3_Key_TripleDES_CBC,
++                                       passphrase, (int) passphrase_len,
++                                       NULL, NULL)) {
++      if (bio) {
++        BIO_free(bio);
++      }
+       if ((int) passphrase_len < MIN_PASSPHRASE_LEN) {
+         log_err(LD_GENERAL, "Passphrase empty or too short. Passphrase needs "
+                 "to be at least %d characters.", MIN_PASSPHRASE_LEN);
+@@ -301,6 +307,9 @@
+       abort_writing_to_file(open_file);
+       return 1;
+     }
++    if (bio) {
++      BIO_free(bio);
++    }
+ 
+     finish_writing_to_file(open_file);
+   } else {
+@@ -320,7 +329,11 @@
+     }
+ 
+     /* Read the key.  If passphrase is not set, takes it from the terminal. */
+-    identity_key = PEM_read_PrivateKey(f, NULL, NULL, passphrase);
++    BIO *bio = BIO_new_fp(f, BIO_NOCLOSE);
++    identity_key = bio ? PEM_read_bio_PrivateKey(bio, NULL, NULL, passphrase) : NULL;
++    if (bio) {
++      BIO_free(bio);
++    }
+     if (!identity_key) {
+       log_err(LD_GENERAL, "Couldn't read identity key from %s",
+               identity_key_file);
+@@ -378,7 +391,10 @@
+     return 1;
+ 
+   /* Write signing key with no encryption. */
+-  if (!PEM_write_RSAPrivateKey(f, key, NULL, NULL, 0, NULL, NULL)) {
++  BIO *bio = BIO_new_fp(f, BIO_NOCLOSE);
++  if (!bio || !PEM_write_bio_RSAPrivateKey(bio, key, NULL, NULL, 0, NULL, NULL)) {
++    if (bio) BIO_free(bio);
+     crypto_openssl_log_errors(LOG_WARN, "writing signing key");
+     abort_writing_to_file(open_file);
+     return 1;
+@@ -386,6 +402,9 @@
+ 
+   finish_writing_to_file(open_file);
+ 
++  if (bio) {
++    BIO_free(bio);
++  }
+   return 0;
+ }
+ 

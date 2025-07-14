@@ -20,3 +20,17 @@ To cross-compile for Windows from Linux install `mingw32` and/or `mingw64` and c
 ```
 cargo build -vv --features=vendored-openssl --target=x86_64-pc-windows-gnu
 ```
+
+# Mac ARM Android
+
+```
+rustup target add aarch64-linux-android
+rustup target add armv7-linux-androideabi
+rustup target add i686-linux-android
+# Emulator
+rustup target add x86_64-linux-android
+
+cargo install cargo-ndk
+
+./scripts/android.sh
+```

@@ -33,4 +33,27 @@ rustup target add x86_64-linux-android
 cargo install cargo-ndk
 
 ./scripts/android.sh
+
+# All platforms (auto-detects host OS and architecture):
+
+# Default build (aarch64-linux-android)
+./scripts/android.sh
+
+# Specific Android targets:
+./scripts/android.sh aarch64-linux-android    # Android ARM64
+./scripts/android.sh armv7-linux-androideabi  # Android ARMv7
+./scripts/android.sh i686-linux-android       # Android x86
+./scripts/android.sh x86_64-linux-android     # Android x86_64 (emulator)
+
+# Debug builds (faster compilation):
+./scripts/android-debug.sh
+./scripts/android-debug.sh armv7-linux-androideabi
+
+# Target selection: Choose based on what Android device/emulator you're targeting:
+    # aarch64-linux-android - Modern Android devices (ARM64)
+    # armv7-linux-androideabi - Older Android devices (ARMv7)
+    # x86_64-linux-android - Android emulator on x86_64
+    # i686-linux-android - Android emulator on x86
+
+
 ```

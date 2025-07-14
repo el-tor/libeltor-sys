@@ -59,22 +59,33 @@ detect_host_os_arch() {
 HOST_ARCH=$(detect_host_os_arch)
 
 # === NDK Paths ===
-if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
-    # Windows paths
-    NDK="$USERPROFILE/AppData/Local/Android/Sdk/ndk/$ANDROID_NDK_VERSION"
-    TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/windows-x86_64"
-elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    # Linux paths
-    NDK="$HOME/Android/Sdk/ndk/$ANDROID_NDK_VERSION"
+# Check if NDK_HOME is already set, otherwise use default paths
+if [[ -n "${NDK_HOME:-}" && -d "$NDK_HOME" ]]; then
+    echo " Using existing NDK_HOME: $NDK_HOME"
+    NDK="$NDK_HOME"
     TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/$HOST_ARCH"
 else
-    # macOS paths
-    NDK="$HOME/Library/Android/sdk/ndk/$ANDROID_NDK_VERSION"
-    TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/$HOST_ARCH"
+    echo " NDK_HOME not set or invalid, using default paths"
+    if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+        # Windows paths
+        NDK="$USERPROFILE/AppData/Local/Android/Sdk/ndk/$ANDROID_NDK_VERSION"
+        TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/windows-x86_64"
+    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        # Linux paths
+        NDK="$HOME/Android/Sdk/ndk/$ANDROID_NDK_VERSION"
+        TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/$HOST_ARCH"
+    else
+        # macOS paths
+        NDK="$HOME/Library/Android/sdk/ndk/$ANDROID_NDK_VERSION"
+        TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/$HOST_ARCH"
+    fi
 fi
 
 # === Environment setup (minimal working config) ===
-export NDK_HOME="$NDK"
+# Only export NDK_HOME if it wasn't already set
+if [[ -z "${NDK_HOME:-}" ]]; then
+    export NDK_HOME="$NDK"
+fi
 
 # Set target-specific compiler
 case "$TARGET" in
@@ -106,11 +117,11 @@ fi
 
 # Verify Rust target is installed
 if ! rustup target list --installed | grep -q "$TARGET"; then
-    echo "📦 Installing Rust target: $TARGET"
+    echo "Installing Rust target: $TARGET"
     rustup target add "$TARGET"
 fi
 
-echo "🏗 Building for $TARGET (API $ANDROID_API)..."
+echo "Building for $TARGET (API $ANDROID_API)..."
 echo "Detected host: $HOST_ARCH"
 echo "Using NDK: $NDK"
 echo "Using toolchain: $TOOLCHAIN"

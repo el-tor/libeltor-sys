@@ -101,14 +101,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let libevent = copy_src("libevent-src");
     let tor = copy_src("tor-src");
 
-    for patch in get_patches("libevent") {
-        apply_patch(&patch, &libevent)
-            .map_err(|e| format!("Error applying patch '{}': {:?}", patch.display(), e))?;
-    }
-    for patch in get_patches("tor") {
-        apply_patch(&patch, &tor)
-            .map_err(|e| format!("Error applying patch '{}': {:?}", patch.display(), e))?;
-    }
+    // for patch in get_patches("libevent") {
+    //     apply_patch(&patch, &libevent)
+    //         .map_err(|e| format!("Error applying patch '{}': {:?}", patch.display(), e))?;
+    // }
+    // for patch in get_patches("tor") {
+    //     apply_patch(&patch, &tor)
+    //         .map_err(|e| format!("Error applying patch '{}': {:?}", patch.display(), e))?;
+    // }
 
     autogen(&libevent)?;
     autogen(&tor)?;

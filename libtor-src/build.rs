@@ -62,19 +62,38 @@ fn copy_src(name: &str) -> PathBuf {
 fn get_patches(prefix: &str) -> Vec<PathBuf> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("patches");
 
-    fs::read_dir(&root)
-        .expect("Unable to list patches")
-        .collect::<Result<Vec<_>, _>>()
-        .expect("Error listing patches")
+    // Return empty vector if patches directory doesn't exist
+    if !root.exists() {
+        return Vec::new();
+    }
+
+    let read_dir = match fs::read_dir(&root) {
+        Ok(dir) => dir,
+        Err(e) => {
+            eprintln!("Warning: Unable to list patches directory: {}", e);
+            return Vec::new();
+        }
+    };
+
+    let entries = match read_dir.collect::<Result<Vec<_>, _>>() {
+        Ok(entries) => entries,
+        Err(e) => {
+            eprintln!("Warning: Error reading patches directory: {}", e);
+            return Vec::new();
+        }
+    };
+
+    entries
         .into_iter()
-        .filter(|entry| {
+        .filter_map(|entry| {
+            // Skip entries with invalid filenames instead of panicking
             entry
                 .file_name()
                 .into_string()
-                .expect("Invalid patch name")
-                .starts_with(prefix)
+                .ok()
+                .filter(|name| name.starts_with(prefix))
+                .map(|_| entry.path())
         })
-        .map(|entry| entry.path().into())
         .collect()
 }
 

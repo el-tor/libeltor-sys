@@ -49,3 +49,13 @@ Cross-compiling for iOS on a Mac that has the `Xcode Command Line Tools` install
 
 Cross-compiling for Windows using MingW should also work out of the box, as long as you have the right compiler and the required libraries installed. To link the library into binaries it's generally required to also
 install the static version of `libwinpthreads`.
+
+## Local upstream 0.5.0 integration
+
+The `merge-upstream-0.5.0` branch vendors Tor 0.5.0.0-alpha-dev from upstream
+`4792124a79a10fd66ecfd4f16771396372d744a0`, combined with the existing El Tor
+changes. See [the integration notes](libtor-src/tor-src/doc/ELTOR_UPSTREAM_0.5.0.md)
+for the merge decisions and validation. Packaging version labels have not been
+renumbered. The enlarged-cell fork retains TOR1 circuit encryption and disables
+upstream's incompatible 509-byte CGO negotiation. The vendored relay still
+requires payment metadata; the standalone Chutney-only bypass is not imported.
